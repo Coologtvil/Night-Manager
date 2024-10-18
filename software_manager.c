@@ -14,6 +14,7 @@ void on_install_clicked(GtkWidget *widget, gpointer data);
 void on_uninstall_clicked(GtkWidget *widget, gpointer data);
 void on_toggle_terminal_clicked(GtkWidget *widget, gpointer data);
 void populate_package_list(GtkListStore *list_store);
+char *selected_package_name = NULL;
 
 void fetch_available_packages(GtkListStore *list_store) {
     FILE *fp;
@@ -42,7 +43,8 @@ void on_package_selected(GtkTreeView *tree_view, GtkTreePath *path, GtkTreeViewC
     model = gtk_tree_view_get_model(tree_view);
     if (gtk_tree_model_get_iter(model, &iter, path)) {
         gtk_tree_model_get(model, &iter, 0, &selected_package, -1);
-        
+        g_free(selected_package_name);
+        gtk_tree_model_get(model, &iter, 0, &selected_package_name, -1);
         gchar *details = g_strdup_printf("Package: %s\nVersion: 1.0.0\nSize: 10MB", selected_package);
         gtk_label_set_text(GTK_LABEL(details_label), details);
         g_free(details);
@@ -65,17 +67,20 @@ void on_package_selected(GtkTreeView *tree_view, GtkTreePath *path, GtkTreeViewC
 // }
 
 void on_install_clicked(GtkWidget *widget, gpointer data) {
-    g_print("Installing package...\n");
-    
+     if (selected_package_name == NULL) {
+        g_print("No package selected.\n");
+        return;
+    }
+    g_print("Installing package...\n"); 
     // The command that will be executed when the package is installed
-    const char *command[] = { "/bin/sh", "-c", "echo 'Installing package...' && sudo pacman -S --noconfirm <package-name>", NULL };
-    
     // Spawn the command in the embedded terminal
+     gchar *command = g_strdup_printf("echo 'Installing package...' && sudo pacman -S --noconfirm %s", selected_package_name);
+    const char *command_arr[] = { "/bin/sh", "-c", command, NULL };
     vte_terminal_spawn_async(
         VTE_TERMINAL(terminal),       // The VTE terminal widget
         VTE_PTY_DEFAULT,              // Use the default pseudo-terminal
         NULL,                         // Working directory (NULL uses current directory)
-        (char **)command,             // Command to execute
+        (char **)command_arr,             // Command to execute
         NULL,                         // Environment (NULL uses current environment)
         G_SPAWN_DEFAULT,              // Spawn flags
         NULL,                         // Child setup function (not needed here)
@@ -89,17 +94,20 @@ void on_install_clicked(GtkWidget *widget, gpointer data) {
 }
 
 void on_uninstall_clicked(GtkWidget *widget, gpointer data) {
+    if (selected_package_name == NULL) {
+        g_print("No package selected.\n");
+        return;
+    }
     g_print("Uninstalling package...\n");
-    
     // Prepare the command to be executed in the terminal
-    const char *command[] = { "/bin/sh", "-c", "echo 'Uninstalling package...' && sudo pacman -R --noconfirm <package-name>", NULL };
-    
+     gchar *command = g_strdup_printf("echo 'Uninstalling package...' && sudo pacman -R --noconfirm %s", selected_package_name);
+    const char *command_arr[] = { "/bin/sh", "-c", command, NULL };
     // Spawn the command in the embedded terminal
     vte_terminal_spawn_async(
         VTE_TERMINAL(terminal),       // The VTE terminal widget
         VTE_PTY_DEFAULT,              // Use the default pseudo-terminal
         NULL,                         // Working directory (NULL uses current directory)
-        (char **)command,             // Command to execute
+        (char **)command_arr,             // Command to execute
         NULL,                         // Environment (NULL uses current environment)
         G_SPAWN_DEFAULT,              // Spawn flags
         NULL,                         // Child setup function (not needed here)
@@ -147,7 +155,7 @@ int main(int argc, char *argv[]) {
 
     // Package list
     list_store = gtk_list_store_new(1, G_TYPE_STRING);
-    fetch_available_packages(list_store);  /
+    fetch_available_packages(list_store);  
 
     package_list = gtk_tree_view_new_with_model(GTK_TREE_MODEL(list_store));
     renderer = gtk_cell_renderer_text_new();
